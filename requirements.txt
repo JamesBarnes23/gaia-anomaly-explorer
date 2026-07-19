@@ -1,0 +1,7 @@
+astroquery>=0.4.7
+astropy>=6.0
+numpy>=1.26
+pandas>=2.2
+scikit-learn>=1.4
+requests>=2.31
+tqdm>=4.66
