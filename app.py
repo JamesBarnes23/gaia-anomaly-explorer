@@ -266,6 +266,29 @@ if matched_df is None:
 
 tab_table, tab_detail, tab_cmd = st.tabs(["Candidate table", "Candidate detail", "Color-magnitude diagram"])
 
+# Common SIMBAD object type (otype) codes, for reference. Not exhaustive -
+# SIMBAD has ~150+ codes - these are the ones most likely to turn up among
+# stellar anomaly candidates like the ones this pipeline surfaces.
+OTYPE_LEGEND = {
+    "*": "Star (generic - no more specific classification on record)",
+    "**": "Double or multiple star system",
+    "PM*": "High proper-motion star",
+    "EB*": "Eclipsing binary",
+    "SB*": "Spectroscopic binary",
+    "WD*": "White dwarf",
+    "sg*": "Subgiant star",
+    "RG*": "Red giant branch star",
+    "HB*": "Horizontal branch star",
+    "Ce*": "Cepheid variable",
+    "RR*": "RR Lyrae variable",
+    "V*": "Generic variable star",
+    "Pe*": "Peculiar star (unusual spectrum for its type)",
+    "s*r": "Red supergiant",
+    "s*b": "Blue supergiant",
+    "BD*": "Brown dwarf",
+    "Y*O": "Young stellar object",
+}
+
 # --- Tab 1: table ---
 with tab_table:
     st.subheader(f"Top {len(matched_df)} anomaly candidates")
@@ -279,11 +302,42 @@ with tab_table:
     # integer range (2^53) - render as a string so Streamlit's table widget
     # doesn't risk silently rounding the last couple of digits.
     display_df["source_id"] = display_df["source_id"].astype(str)
+
+    column_config = {
+        "anomaly_rank": st.column_config.NumberColumn("Rank", help="Position in the anomaly ranking - 1 is most unusual."),
+        "source_id": st.column_config.TextColumn("Gaia Source ID", help="Unique Gaia DR3 identifier for this star."),
+        "anomaly_score": st.column_config.NumberColumn("Anomaly Score", help="Higher = more statistically unusual, from Isolation Forest scoring."),
+        "bp_rp": st.column_config.NumberColumn("BP-RP Color", help="Color index (temperature proxy). Higher/more positive = redder/cooler."),
+        "abs_g_mag": st.column_config.NumberColumn("Abs. G Mag", help="Absolute magnitude - true luminosity, independent of distance. Lower (more negative) = intrinsically brighter."),
+        "v_tan_km_s": st.column_config.NumberColumn("Tangential Velocity (km/s)", help="Sideways velocity across the sky, derived from proper motion + distance."),
+        "parallax_rel_error": st.column_config.NumberColumn("Parallax Rel. Error", help="Parallax uncertainty relative to the parallax itself. High values mean the distance (and anything derived from it) is unreliable."),
+        "ruwe": st.column_config.NumberColumn("RUWE", help="Renormalised Unit Weight Error - Gaia's astrometric fit-quality flag. Above ~1.4 often indicates an unresolved binary or bad fit."),
+        "simbad_match": st.column_config.CheckboxColumn("Known in SIMBAD?", help="Whether this star already has a published classification in SIMBAD."),
+        "otype": st.column_config.TextColumn("SIMBAD Object Type", help="SIMBAD's classification code, if known - see the legend below the table for what common codes mean."),
+    }
+    column_config = {k: v for k, v in column_config.items() if k in display_cols}
+
     st.dataframe(
         display_df,
         use_container_width=True,
         hide_index=True,
+        column_config=column_config,
     )
+
+    with st.expander("What do the SIMBAD Object Type codes mean?"):
+        st.caption(
+            "SIMBAD uses ~150+ short codes to classify objects. These are the "
+            "ones most likely to show up among stellar anomaly candidates - "
+            "not an exhaustive list."
+        )
+        legend_df = pd.DataFrame(
+            [{"Code": code, "Meaning": meaning} for code, meaning in OTYPE_LEGEND.items()]
+        )
+        st.table(legend_df.set_index("Code"))
+        st.caption(
+            "A blank/empty otype means the star has no SIMBAD entry at all "
+            "(see the 'Known in SIMBAD?' column) - it isn't a code itself."
+        )
 
 # --- Tab 2: detail view ---
 with tab_detail:
