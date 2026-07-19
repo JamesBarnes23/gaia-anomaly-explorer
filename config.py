@@ -8,8 +8,8 @@ anomaly-detection thresholds without touching the pipeline code.
 # --- Sky region to search --------------------------------------------------
 # Default: a patch near the Galactic anticenter with modest crowding,
 # good for a first test run. Change RA/DEC/RADIUS to explore elsewhere.
-SEARCH_RA_DEG = 86.0        # Right ascension, degrees
-SEARCH_DEC_DEG = -1.0       # Declination, degrees
+SEARCH_RA_DEG = 180.0        # Right ascension, degrees
+SEARCH_DEC_DEG = 43.0       # Declination, degrees
 SEARCH_RADIUS_DEG = 0.5     # Cone search radius, degrees
 
 # --- Query limits ------------------------------------------------------------

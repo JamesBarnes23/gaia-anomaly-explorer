@@ -14,6 +14,8 @@ Lets you:
     against the full sample
 """
 
+import datetime
+import datetime
 import json
 import os
 
@@ -31,6 +33,38 @@ import llm_report
 st.set_page_config(page_title="Gaia Anomaly Explorer", layout="wide")
 
 NOTES_PATH = os.path.join(config.OUTPUT_DIR, "candidate_notes.json")
+QUERY_META_PATH = os.path.join(config.CACHE_DIR, "last_query_meta.json")
+
+
+def save_query_meta(ra: float, dec: float, radius: float, n_sources: int):
+    """
+    Records exactly what region was queried and when. Displayed in the
+    sidebar so it's easy to confirm a fresh query actually ran, rather
+    than silently trusting stale cached data.
+    """
+    os.makedirs(config.CACHE_DIR, exist_ok=True)
+    with open(QUERY_META_PATH, "w") as f:
+        json.dump({
+            "ra": ra, "dec": dec, "radius": radius,
+            "n_sources": n_sources,
+            "timestamp": datetime.datetime.now().isoformat(timespec="seconds"),
+        }, f, indent=2)
+
+
+def load_query_meta() -> dict | None:
+    if os.path.exists(QUERY_META_PATH):
+        with open(QUERY_META_PATH) as f:
+            return json.load(f)
+    return None
+
+
+def clear_cache_files():
+    """Actually deletes the on-disk CSV caches - NOT the same as Streamlit's
+    built-in 'Clear cache' menu option, which only affects
+    @st.cache_data/@st.cache_resource and has no effect on these files."""
+    for path in [config.RAW_GAIA_CACHE, config.SCORED_CACHE, config.CROSSMATCHED_CACHE, QUERY_META_PATH]:
+        if os.path.exists(path):
+            os.remove(path)
 
 
 # --------------------------------------------------------------------------
@@ -42,6 +76,51 @@ def load_notes() -> dict:
         with open(NOTES_PATH) as f:
             return json.load(f)
     return {}
+
+
+LAST_FETCH_META_PATH = os.path.join(config.CACHE_DIR, "last_fetch_meta.json")
+
+
+def save_last_fetch_meta(ra: float, dec: float, radius: float, n_sources: int):
+    """
+    Records exactly what region/time the last successful fetch used, so the
+    GUI can show unambiguous proof a fresh fetch actually happened - rather
+    than the user having to guess whether stale cached data is being reused.
+    """
+    meta = {
+        "ra": ra,
+        "dec": dec,
+        "radius": radius,
+        "n_sources": n_sources,
+        "fetched_at": datetime.datetime.now().isoformat(timespec="seconds"),
+    }
+    os.makedirs(config.CACHE_DIR, exist_ok=True)
+    with open(LAST_FETCH_META_PATH, "w") as f:
+        json.dump(meta, f, indent=2)
+
+
+def load_last_fetch_meta() -> dict | None:
+    if os.path.exists(LAST_FETCH_META_PATH):
+        with open(LAST_FETCH_META_PATH) as f:
+            return json.load(f)
+    return None
+
+
+def clear_cache_files():
+    """
+    Deletes all cached pipeline output (raw sample, scored sample, cross-matched
+    candidates, and the last-fetch metadata) so the next fetch starts completely
+    fresh. Does NOT delete output/candidate_notes.json - those are your own
+    follow-up notes, not pipeline cache, and clearing cache shouldn't lose them.
+    """
+    for path in (
+        config.RAW_GAIA_CACHE,
+        config.SCORED_CACHE,
+        config.CROSSMATCHED_CACHE,
+        LAST_FETCH_META_PATH,
+    ):
+        if os.path.exists(path):
+            os.remove(path)
 
 
 def save_note(source_id: int, text: str):
@@ -103,6 +182,16 @@ radius = st.sidebar.slider(
          "MAX_SOURCES in config.py limits how many rows come back regardless.",
 )
 
+st.sidebar.subheader("Analysis")
+top_n = st.sidebar.slider(
+    "Number of top candidates to analyse", min_value=5, max_value=200,
+    value=int(config.TOP_N_CANDIDATES), step=5,
+    help="How many highest-scoring anomalies get cross-matched against SIMBAD "
+         "and made available for detailed review. Larger values take longer to "
+         "cross-match (SIMBAD is queried once per candidate) but surface more "
+         "borderline cases - useful if a sparse region returns few standout candidates.",
+)
+
 st.sidebar.subheader("Actions")
 run_query = st.sidebar.button("1. Fetch Gaia sample + score anomalies", use_container_width=True)
 run_crossmatch = st.sidebar.button("2. Cross-match top candidates (SIMBAD)", use_container_width=True)
@@ -112,6 +201,14 @@ st.sidebar.caption(
     "Steps run in order. Step 1 must complete (and produce "
     f"`{config.SCORED_CACHE}`) before step 2 will find anything to match."
 )
+
+st.sidebar.divider()
+st.sidebar.subheader("Cache")
+clear_cache = st.sidebar.button("🗑️ Clear all cached data", use_container_width=True)
+if clear_cache:
+    clear_cache_files()
+    st.sidebar.success("Cache cleared. Click step 1 to fetch fresh data.")
+    st.rerun()
 
 if run_query:
     config.SEARCH_RA_DEG = ra
@@ -127,9 +224,11 @@ if run_query:
             enriched = features.add_derived_features(raw)
             scored = features.score_anomalies(enriched)
             scored.to_csv(config.SCORED_CACHE, index=False)
-        st.sidebar.success(f"Scored {len(scored)} sources.")
+            save_last_fetch_meta(ra, dec, radius, len(scored))
+        st.sidebar.success(f"Scored {len(scored)} sources for RA={ra}, Dec={dec}, radius={radius}.")
 
 if run_crossmatch:
+    config.TOP_N_CANDIDATES = top_n
     scored = load_scored()
     if scored is None:
         st.sidebar.error("Run step 1 first - no scored data found.")
@@ -145,6 +244,15 @@ if run_crossmatch:
 # --------------------------------------------------------------------------
 
 st.title("🔭 Gaia Anomaly Explorer")
+
+last_fetch = load_last_fetch_meta()
+if last_fetch:
+    st.caption(
+        f"📍 Last successful fetch: RA={last_fetch['ra']}, Dec={last_fetch['dec']}, "
+        f"radius={last_fetch['radius']}° → {last_fetch['n_sources']} sources "
+        f"(at {last_fetch['fetched_at']}). If this doesn't match the region you "
+        f"expect, click **Clear all cached data** in the sidebar, then re-run step 1."
+    )
 
 matched_df = load_crossmatched()
 
