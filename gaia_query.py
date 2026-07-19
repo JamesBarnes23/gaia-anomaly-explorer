@@ -17,6 +17,31 @@ import config
 logger = logging.getLogger(__name__)
 
 
+def validate_search_region(ra_deg: float, dec_deg: float, radius_deg: float):
+    """
+    Raises ValueError with a clear message if the search region is not a
+    valid sky position. Without this check, an invalid coordinate (e.g.
+    Dec outside -90..+90) still gets sent to the Gaia TAP service as a
+    malformed ADQL CIRCLE(), which the server rejects with an opaque
+    HTTP 500 rather than a helpful validation message.
+    """
+    if not (0.0 <= ra_deg < 360.0):
+        raise ValueError(
+            f"Invalid RA: {ra_deg} deg. Right ascension must be in [0, 360)."
+        )
+    if not (-90.0 <= dec_deg <= 90.0):
+        raise ValueError(
+            f"Invalid Dec: {dec_deg} deg. Declination must be in [-90, 90] "
+            "(it's measured from the celestial equator, not a full 360-degree "
+            "coordinate like RA)."
+        )
+    if not (0.0 < radius_deg <= 90.0):
+        raise ValueError(
+            f"Invalid search radius: {radius_deg} deg. Must be > 0 and, "
+            "practically, well under 90 to keep query sizes reasonable."
+        )
+
+
 def build_adql_query() -> str:
     """
     Construct the ADQL query string for a cone search against gaiadr3.gaia_source,
@@ -25,6 +50,8 @@ def build_adql_query() -> str:
       - photometry: G, BP, RP magnitudes (for color-magnitude diagram features)
       - identifiers: source_id, ra, dec (for cross-matching later)
     """
+    validate_search_region(config.SEARCH_RA_DEG, config.SEARCH_DEC_DEG, config.SEARCH_RADIUS_DEG)
+
     ruwe_filter = f"AND ruwe < {config.RUWE_MAX}" if config.REQUIRE_GOOD_ASTROMETRY else ""
     parallax_filter = (
         f"AND parallax > {config.MIN_PARALLAX_MAS}"

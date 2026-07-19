@@ -115,6 +115,33 @@ WISE for infrared colors; ZTF/ASAS-SN for variability) before considering
 any kind of report to a service like the AAVSO or a professional contact —
 this pipeline is a triage/vetting aid, not a confirmation.
 
+## GUI
+
+A Streamlit interface (`app.py`) sits on top of the same pipeline modules -
+no duplicate logic, it just calls `gaia_query`, `features`, `crossmatch`, and
+`llm_report` directly.
+
+```bash
+streamlit run app.py
+```
+
+What it gives you:
+- **Sidebar** — edit search region (RA/Dec/radius) and trigger the fetch+score
+  and cross-match steps without touching the command line
+- **Candidate table** — sortable/filterable view of all top candidates
+- **Candidate detail** — full feature breakdown, SIMBAD status, an embedded
+  Aladin Lite finder chart, an on-demand "Generate report" button that calls
+  your local Ollama model just for the selected candidate, and a notes box
+  that saves your own follow-up findings to `output/candidate_notes.json`
+- **Color-magnitude diagram** — the full sample plotted with top candidates
+  highlighted, so you can see at a glance how a candidate's color/luminosity
+  compares to the bulk of "normal" stars in your search region
+
+The GUI reads from the same `cache/gaia_scored.csv` and
+`cache/gaia_crossmatched.csv` files the CLI pipeline produces, so you can
+freely mix `python pipeline.py` runs and GUI-triggered runs - whichever ran
+most recently is what the GUI displays.
+
 ## Notes on scaling up
 
 - SIMBAD's public interface isn't meant for bulk querying — that's why

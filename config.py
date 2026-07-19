@@ -28,7 +28,7 @@ MIN_PARALLAX_SIGNIFICANCE = 5.0
 # --- Anomaly scoring ----------------------------------------------------------
 ANOMALY_METHOD = "isolation_forest"   # "isolation_forest" or "zscore"
 ISOLATION_FOREST_CONTAMINATION = 0.02  # Expected fraction of outliers
-TOP_N_CANDIDATES = 25                  # How many top anomalies to carry to cross-match + LLM stage
+TOP_N_CANDIDATES = 5                  # How many top anomalies to carry to cross-match + LLM stage
 
 # --- SIMBAD cross-match --------------------------------------------------------
 CROSSMATCH_RADIUS_ARCSEC = 5.0
